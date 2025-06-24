@@ -1,0 +1,44 @@
+server:
+  port: 8080
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          authorities-claim-name: roles
+          authority-prefix: ROLE_
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/telegramBot
+    username: telegramBot
+    password: 123
+
+  jpa:
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        naming:
+          implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyComponentPathImpl
+          temp:
+            use_jdbc_metadata_defaults: false
+    hibernate:
+      ddl-auto: update
+  application:
+    name: TelegramQuestionBot
+
+fluent:
+  bot:
+    token: 7959559140:AAGZ9PGpktPiioMBbNjroMUCx2Lf_LjoG6c
+    username: zeroonequestion_bot
+    process-type: both
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    jdbc-url: jdbc:postgresql://localhost:5432/telegramBot
+    username: telegramBot
+    password: 123
+    properties:
+      hibernate:
+        hbm2ddl:
+          auto: update
+        show-sql: true
