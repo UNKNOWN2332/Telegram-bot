@@ -1,5 +1,6 @@
 package uz.shukrullaev.questionbot
 
+import org.khasanof.service.template.FluentTemplate
 import org.khasanof.utils.keyboards.inline.InlineKeyboardMarkupBuilder
 import org.khasanof.utils.keyboards.reply.ReplyKeyboardMarkupBuilder
 import org.springframework.context.MessageSource
@@ -17,6 +18,7 @@ import java.util.*
 @Component
 class ButtonUtils(
     val messageSource: MessageSource,
+    val fluentTemplate: FluentTemplate,
 ) {
 
     fun chooseLanguage(): InlineKeyboardMarkup {
@@ -38,39 +40,78 @@ class ButtonUtils(
         return builder.build()
     }
 
+    fun menuOperator(locale: Locale): InlineKeyboardMarkup {
+        val question = messageSource.getMessage("is_online", null, locale)
+        val settings = messageSource.getMessage("settings_operators", null, locale)
+        val statistic = messageSource.getMessage("statistics", null, locale)
+        val builder = InlineKeyboardMarkupBuilder()
+        builder.addButton(question, "is-online")
+        builder.addRow()
+        builder.addButton(settings, "settings")
+        builder.addRow()
+        builder.addButton(statistic,"statistics")
+        return builder.build()
+    }
+
     fun settings(locale: Locale): InlineKeyboardMarkup {
         val builder = InlineKeyboardMarkupBuilder()
         val setLang = messageSource.getMessage("set_language", null, locale)
         val setName = messageSource.getMessage("set_name", null, locale)
         val setPhone = messageSource.getMessage("set_phone", null, locale)
-        builder.addButton(setLang,"set_lang")
+        builder.addButton(setLang, "set_lang")
         builder.addRow()
-        builder.addButton(setName,"confirm_name")
-        builder.addButton(setPhone,"confirm_phone")
+        builder.addButton(setName, "confirm_name")
+        builder.addButton(setPhone, "confirm_phone")
         return builder.build()
     }
 
-    fun confirmPhoneNumberButtons(locale: Locale): InlineKeyboardMarkup {
-        val builder = InlineKeyboardMarkupBuilder()
-        val confirmPhoneText = messageSource.getMessage("confirm_phone", null, locale)
-        val changePhoneText = messageSource.getMessage("menu", null, locale)
+    fun confirmPhoneNumberButtons(locale: Locale, userAccount: UserAccount): InlineKeyboardMarkup {
+        return confirmButtons(locale, userAccount, "confirm_phone", "confirm_phone")
+    }
 
-        builder.addButton(confirmPhoneText, "confirm_phone")
+    fun confirmFullNameButtons(locale: Locale, userAccount: UserAccount): InlineKeyboardMarkup {
+        return confirmButtons(locale, userAccount, "confirm_name", "confirm_name")
+    }
+
+
+    fun sendToOperatorIfRoleNotUser(it: UserAccount, locale: Locale) {
+        val (menuMarkup, menuMessageKey) = if (it.role == UserRole.OPERATOR) {
+            menuOperator(locale) to "menu_operator"
+        } else {
+            menu(locale) to "menu"
+        }
+        val message = messageSource.getMessage(menuMessageKey, null, locale)
+        fluentTemplate.sendText(message, menuMarkup)
+    }
+
+    fun confirmButtons(
+        locale: Locale,
+        userAccount: UserAccount,
+        confirmTextKey: String,
+        confirmCallback: String,
+    ): InlineKeyboardMarkup {
+        val builder = InlineKeyboardMarkupBuilder()
+
+        val menuKey = if (userAccount.role == UserRole.OPERATOR) "menu_operator" else "menu"
+        val menuCallback = if (userAccount.role == UserRole.OPERATOR) "menu_operator" else "menu"
+
+        val confirmText = messageSource.getMessage(confirmTextKey, null, locale)
+        val menuText = messageSource.getMessage(menuKey, null, locale)
+
+        builder.addButton(confirmText, confirmCallback)
         builder.addRow()
-        builder.addButton(changePhoneText, "menu")
+        builder.addButton(menuText, menuCallback)
 
         return builder.build()
     }
 
-    fun confirmFullNameButtons(locale: Locale): InlineKeyboardMarkup {
-        val builder = InlineKeyboardMarkupBuilder()
-        val confirmPhoneText = messageSource.getMessage("confirm_name", null, locale)
-        val changePhoneText = messageSource.getMessage("menu", null, locale)
-
-        builder.addButton(confirmPhoneText, "confirm_name")
+    fun requestContact(locale: Locale): ReplyKeyboardMarkup {
+        val builder = ReplyKeyboardMarkupBuilder()
+        val contactPhone = messageSource.getMessage("contact_phone", null, locale)
+        builder.addButton(contactPhone).requestContact(true)
         builder.addRow()
-        builder.addButton(changePhoneText, "menu")
-
+        builder.oneTimeKeyboard(true)
+        builder.resizeKeyboard(true)
         return builder.build()
     }
 

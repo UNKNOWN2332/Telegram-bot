@@ -69,30 +69,37 @@ fun UserAccount.toDTO(): UserAccountResponseDto {
 data class MessageRequestDto(
     val message: String,
     val type: MessageType,
+    val filePath: String,
 ) {
     fun toEntity(dto: MessageRequestDto): Message {
         return Message(
             message = dto.message,
             type = dto.type,
-            createdAt = Instant.now()
+            createdAt = Instant.now(),
+            filePath = filePath
         )
     }
 }
 
 data class MessageResponseDto(
-    val message: String,
+    val message: String?,
     val type: MessageType,
     val createdAt: Instant,
+    val filePath: String?,
 ) {
     fun toDTO(entity: Message): MessageResponseDto {
         return MessageResponseDto(
             message = entity.message,
             type = entity.type,
-            createdAt = entity.createdAt
+            createdAt = entity.createdAt,
+            filePath = filePath
         )
     }
 }
-
+data class ExtractedContent(
+    val type: String, // text, photo, animation, video, sticker, voice, audio
+    val value: String // matn yoki fileId
+)
 data class TokenDTO(
     val token: String?,
     val tokenCreateAt: Date?,
@@ -113,6 +120,7 @@ data class LoginDTO(
     val phone: String? = null,
     val password: String? = null,
 )
+
 data class SetRoleDTO(
     @field:Pattern(
         regexp = "^\\+998([- ])?(90|91|93|94|95|98|99|33|97|71)([- ])?(\\d{3})([- ])?(\\d{2})([- ])?(\\d{2})$",
@@ -120,6 +128,7 @@ data class SetRoleDTO(
     )
     val phone: String? = null,
 )
+
 data class RegisterAction(
     val nextState: StateCollection,
     val messageKey: String,

@@ -6,9 +6,9 @@ import org.khasanof.service.template.FluentTemplate
 import org.khasanof.state.repository.StateRepositoryStrategy
 import org.khasanof.utils.UpdateUtils.getUserId
 import org.springframework.context.MessageSource
-import org.springframework.stereotype.Component
 import org.telegram.telegrambots.meta.api.objects.Update
 import kotlin.jvm.optionals.getOrElse
+import kotlin.jvm.optionals.getOrNull
 
 
 /**
@@ -25,6 +25,7 @@ class LanguageState(
     private val strategy: StateRepositoryStrategy,
     private val messageSourceUtil: MessageSourceUtil,
     private val buttonUtils: ButtonUtils,
+    private val queueRepository: QueueRepository,
 ) {
 
     @HandleCallback(value = ["uz", "ru", "en"])
@@ -46,7 +47,7 @@ class LanguageState(
                 fluentTemplate.sendText(
                     messageSource.getMessage("confirm_full_name", null, locale),
                     userId,
-                    buttonUtils.confirmFullNameButtons(locale)
+                    buttonUtils.confirmFullNameButtons(locale, it)
                 )
                 return
 
@@ -92,6 +93,17 @@ class LanguageState(
         fluentTemplate.sendText(message, userId, menu)
     }
 
+    @HandleCallback(value = ["menu_operator"])
+    fun menuOperator(update: Update) {
+        val userId = getUserId(update)
+        val locale = messageSourceUtil.getLocale(userId)
+
+        val menu = buttonUtils.menuOperator(locale)
+        val message = messageSource.getMessage("menu_operator", null, locale)
+
+        fluentTemplate.sendText(message, userId, menu)
+    }
+
     @HandleCallback(value = ["settings"])
     fun settings(update: Update) {
         val userId = getUserId(update)
@@ -118,6 +130,37 @@ class LanguageState(
         val state = strategy.findById(userId).orElseThrow()
         state.nextState(StateCollection.QUESTION)
         fluentTemplate.sendText(message, userId)
+    }
+
+    @HandleCallback("is-online")
+    fun isOnline(update: Update) {
+        val userId = getUserId(update)
+        val locale = messageSourceUtil.getLocale(userId)
+        val user = userRepository.findByTelegramIdAndDeletedFalse(userId).getOrNull()
+            ?.takeIf { it.role == UserRole.OPERATOR }
+            ?: run {
+                fluentTemplate.sendText(messageSource.getMessage("warning", null, locale), userId)
+                return
+            }
+
+        user.apply { isBusy = !isBusy!! }
+            .also(userRepository::save)
+
+        val messageKey = if (user.isBusy == true) "switch_true" else "switch_false"
+        val message = messageSource.getMessage(messageKey, null, locale)
+        val menuOperator = buttonUtils.menuOperator(locale)
+        fluentTemplate.sendText(message, userId, menuOperator)
+
+    }
+
+    @HandleCallback("statistics")
+    fun statistic(update: Update) {
+        val operatorId = getUserId(update)
+        val locale = messageSourceUtil.getLocale(operatorId)
+        val user = userRepository.findByTelegramIdAndDeletedFalse(operatorId).getOrNull()
+        val count = queueRepository.getStatisticOperator(user!!.id!!)
+        val message = messageSource.getMessage("statistic", arrayOf(count, user.fullName), locale)
+        fluentTemplate.sendText(message, operatorId)
     }
 
     private fun checkUserOrElseCreate(userId: Long): UserAccount {

@@ -25,41 +25,91 @@ class GeneralTelegramApi(
     private val messageSource: MessageSource,
     private val strategy: StateRepositoryStrategy,
     private val messageSourceUtil: MessageSourceUtil,
-
+    private val queueRepository: QueueRepository,
 ) {
+
     @HandleMessage("/start")
     fun start(update: Update) {
         val userId = getUserId(update)
 
         val userAccount = userRepository.findByTelegramIdAndDeletedFalse(userId)
             .getOrElse { userRepository.save(UserAccount(userId)) }
-        if (userAccount.languages.firstOrNull() == null || userAccount.languages.firstOrNull() == Language.UZ && userAccount.fullName == null && userAccount.phone == null) {
-            userRegister(update)
-        } else
-            ensureUserProfileCompleted(update, userAccount).runIfFalse {
-                val menu = buttonUtils.menu(messageSourceUtil.getLocale(userId))
-                val locale = messageSourceUtil.getLocale(userAccount.telegramId)
-                val message = messageSource.getMessage("menu", null, locale)
 
-                fluentTemplate.sendText(message, menu)
-            }
+        if (userDataIsIncomplete(userAccount)) {
+            promptUserRegistration(update)
+            return
+        }
+
+        val profileCompleted = ensureUserProfileCompleted(update, userAccount)
+
+        if (!profileCompleted) {
+            val locale = messageSourceUtil.getLocale(userId)
+            buttonUtils.sendToOperatorIfRoleNotUser(userAccount, locale)
+        }
     }
 
-    private fun getUserId(update: Update): Long = UpdateUtils.getUserId(update)
+    @HandleMessage("/finish")
+    fun finishChat(update: Update) {
+        val operatorId = getUserId(update)
+        val locale = messageSourceUtil.getLocale(operatorId)
+        var message = messageSource.getMessage("user_not_found", null, locale)
+        val state = strategy.findById(operatorId).get()
 
-    fun userRegister(update: Update) {
+        var userAccount = userRepository.findByTelegramIdAndDeletedFalse(operatorId)
+            .getOrElse {
+                fluentTemplate.sendText(message, operatorId)
+                return
+            }
+
+        message = messageSource.getMessage("user_have_not_permission", null, locale)
+        userAccount.takeIf { it.role == UserRole.OPERATOR }
+            ?.let {
+                if (!userAccount.isBusy!!) {
+                    message = messageSource.getMessage("free", null, locale)
+                    fluentTemplate.sendText(message,operatorId)
+                    return
+                }
+                var queues = queueRepository.findAllRelationUserByOperatorIdOperator(userAccount.id!!)
+                queues.map {
+                    it.status = Status.ANSWERED
+                }
+                val queue = queues.first()
+                val user = queue.user
+                queues = queueRepository.saveAll(queues)
+                userAccount.apply {
+                    isBusy = false
+                }
+                userAccount = userRepository.save(userAccount)
+                val stateUser = strategy.findById(user.telegramId).get()
+                state.nextState(StateCollection.START)
+                stateUser.nextState(StateCollection.START)
+                message = messageSource.getMessage("end_chat_for_user", null, locale)
+                fluentTemplate.sendText(message, user.telegramId)
+                message = messageSource.getMessage("end_chat_for_operator", null, locale)
+                fluentTemplate.sendText(message, operatorId)
+                return
+            } ?: fluentTemplate.sendText(message, operatorId)
+    }
+
+    private fun getUserId(update: Update) = UpdateUtils.getUserId(update)
+
+    private fun userDataIsIncomplete(userAccount: UserAccount) =
+        userAccount.languages.firstOrNull() == null ||
+                (userAccount.languages.first() == Language.UZ && userAccount.fullName == null && userAccount.phone == null)
+
+    private fun promptUserRegistration(update: Update) {
         val button = buttonUtils.chooseLanguage()
         fluentTemplate.sendText("Til tanlang", button)
     }
 
-    fun ensureUserProfileCompleted(update: Update, userAccount: UserAccount): Boolean {
+    private fun ensureUserProfileCompleted(update: Update, userAccount: UserAccount): Boolean {
         val userId = getUserId(update)
         val state = strategy.findById(userId).orElse(null)
         val locale = messageSourceUtil.getLocale(userAccount.telegramId)
 
-        val firstMissingStep = checkMissingStep(userAccount)
+        val missingStep = findFirstMissingStep(userAccount)
 
-        firstMissingStep?.let { action ->
+        missingStep?.let { action ->
             state?.nextState(action.nextState)
             val message = messageSource.getMessage(action.messageKey, null, locale)
             fluentTemplate.sendText(message, userAccount.telegramId)
@@ -68,17 +118,11 @@ class GeneralTelegramApi(
         return false
     }
 
-    private fun checkMissingStep(
-        userAccount: UserAccount,
-    ): RegisterAction? {
-        val firstMissingStep = sequence {
-            if (userAccount.fullName == null) {
-                yield(RegisterAction(StateCollection.FULL_NAME, "full_name"))
-            } else if (userAccount.phone == null) {
-                yield(RegisterAction(StateCollection.PHONE, "phone_number"))
-            }
-        }.firstOrNull()
-        return firstMissingStep
+    private fun findFirstMissingStep(userAccount: UserAccount): RegisterAction? {
+        return when {
+            userAccount.fullName == null -> RegisterAction(StateCollection.FULL_NAME, "full_name")
+            userAccount.phone == null -> RegisterAction(StateCollection.PHONE, "phone_number")
+            else -> null
+        }
     }
-
 }

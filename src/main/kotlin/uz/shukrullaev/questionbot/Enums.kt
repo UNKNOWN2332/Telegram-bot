@@ -29,7 +29,8 @@ enum class MessageType {
 }
 
 enum class Status {
-    CHECKING,
+    CHECK_NOT_SENT,
+    CHECK_SENT,
     NOT_ANSWERED,
     ANSWERING,
     ANSWERED

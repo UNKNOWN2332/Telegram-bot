@@ -61,14 +61,21 @@ interface UserRepository : BaseRepository<UserAccount> {
     fun findByTelegramIdAndDeletedFalse(telegramId: Long): Optional<UserAccount>
 
     @Query(
-        "SELECT u.*, l.languages\n" +
-                "FROM user_account u\n" +
-                "         LEFT JOIN user_account_languages l ON u.id = l.user_account_id\n" +
-                "WHERE l.languages ILIKE ANY (ARRAY [:languages])\n" +
-                "  AND u.role = 'OPERATOR'\n" +
-                "  AND u.is_busy = false", nativeQuery = true
+        "SELECT DISTINCT u.*, l.languages\n" +
+                "               FROM user_account u\n" +
+                "                        LEFT JOIN useraccount_languages l ON u.id = l.useraccount_id\n" +
+                "                        LEFT JOIN queue q on u.id = q.operator_id\n" +
+                "               WHERE l.languages ILIKE ANY (ARRAY [:languages]) AND\n" +
+                "                   q.operator_id IS NOT NULL\n" +
+                "                   AND q.user_id = :userId\n" +
+                "                   AND q.status IN ('CHECK_SENT', 'NOT_ANSWERED', 'CHECK_NOT_SENT')\n" +
+                "                   or\n" +
+                "                   l.languages ILIKE ANY (ARRAY [:languages])\n" +
+                "                 AND u.role = 'OPERATOR'\n" +
+                "                 AND u.isbusy = false", nativeQuery = true
     )
     fun findOperator(
+        userId: Long,
         @Param("languages") languages: MutableSet<String?>,
     ): MutableList<UserAccount>
 }
@@ -77,5 +84,52 @@ interface UserRepository : BaseRepository<UserAccount> {
 interface MessageRepository : BaseRepository<Message> {}
 
 @Repository
-interface QueueRepository : BaseRepository<Queue> {}
+interface QueueRepository : BaseRepository<Queue> {
+    @Query(
+        value = """
+                SELECT q
+    FROM Queue q
+    LEFT JOIN FETCH q.message
+    LEFT JOIN FETCH q.user
+    WHERE q.user.id = :userId
+      AND q.operator IS NULL
+      AND q.status = 'NOT_ANSWERED'
+        """
+    )
+    fun findAllByUserIdAndOperatorIsNullAndStatusIsNotAnswered(userId: Long): MutableList<Queue>
+
+    @Query(
+        """
+    SELECT q
+    FROM Queue q
+    LEFT JOIN FETCH q.user ua
+    WHERE q.user IS NOT NULL
+      AND q.operator.id = :operatorId
+      AND q.status IN ('CHECK_SENT', 'NOT_ANSWERED', 'CHECK_NOT_SENT')
+"""
+    )
+    fun findAllRelationUserByOperatorId(operatorId: Long): MutableList<Queue>
+
+    @Query(
+        """
+    SELECT q
+    FROM Queue q
+    LEFT JOIN FETCH  q.user ua
+    WHERE q.user IS NOT NULL
+      AND q.operator.id = :operatorId
+      AND q.status IN ('CHECK_SENT', 'NOT_ANSWERED', 'CHECK_NOT_SENT', 'ANSWERING')
+"""
+    )
+    fun findAllRelationUserByOperatorIdOperator(operatorId: Long): MutableList<Queue>
+
+    @Query(
+        """
+     select count(distinct (q.user_id, q.operator_id))
+from queue q
+where operator_id = :operatorId
+    """, nativeQuery = true
+    )
+    fun getStatisticOperator(operatorId: Long): Long
+
+}
 

@@ -16,6 +16,7 @@ import org.springframework.context.MessageSource
 import org.springframework.context.annotation.*
 import org.springframework.context.support.ResourceBundleMessageSource
 import org.springframework.core.convert.converter.Converter
+import org.springframework.orm.hibernate5.LocalSessionFactoryBean
 import org.springframework.security.authentication.AbstractAuthenticationToken
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
@@ -34,6 +35,8 @@ import org.springframework.stereotype.Component
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 import java.security.Key
 import java.util.*
+import javax.sql.DataSource
+
 
 /**
  * @see uz.shukrullaev.questionbot
